@@ -8,38 +8,10 @@ import {
   PasteConfig,
 } from "@editorjs/editorjs";
 
-/**
- * Data structure for the GroupImage block.
- */
-export interface GroupImageData {
-  images: ImageData[];
-  caption: string;
-}
-
-/**
- * Data structure for individual image items.
- */
-export interface ImageData {
-  url: string;
-  name: string;
-  size: number;
-  type: string;
-  width: number;
-  height: number;
-  ratio: number;
-}
-
-/**
- * CSS class names used in the GroupImage block.
- */
-interface GroupImageCSS {
-  block: string;
-  imageWrapper: string;
-  wrapper: string;
-  groupImage: string;
-  imageItem: string;
-  caption: string;
-}
+// Import types and modules
+import { GroupImageData, GroupImageCSS } from "./types/interfaces";
+import { FileHandler } from "./modules/FileHandler";
+import { Helpers } from "./utils/helpers";
 
 /**
  * GroupImage class representing a multi-image block with drag-and-drop functionality for Editor.js.
@@ -123,7 +95,7 @@ export default class GroupImage implements BlockTool {
   /**
    * Block data containing images and caption.
    */
-  private data: BlockToolData;
+  private data: GroupImageData;
 
   /**
    * Root HTML element of the block.
@@ -136,9 +108,9 @@ export default class GroupImage implements BlockTool {
   private activateCaption: boolean;
 
   /**
-   * Hidden file input element for image selection.
+   * File handling module.
    */
-  private fileInput: HTMLInputElement;
+  private fileHandler: FileHandler;
 
   /**
    * Creates an instance of the GroupImage block.
@@ -146,11 +118,14 @@ export default class GroupImage implements BlockTool {
    */
   constructor({ data, api }: BlockToolConstructorOptions) {
     this.api = api;
-    this.data = data || { images: [], caption: "" };
+    this.data = (data as GroupImageData) || { images: [], caption: "" };
     this._CSS = this.initializeCSS();
-    this._element = this.drawView();
     this.activateCaption = !!this.data.caption;
-    this.fileInput = this.createFileInput();
+
+    // Initialize file handler
+    this.fileHandler = new FileHandler(this.api);
+
+    this._element = this.drawView();
   }
 
   /**
@@ -169,93 +144,11 @@ export default class GroupImage implements BlockTool {
   }
 
   /**
-   * Creates a hidden file input element for image selection.
-   * @returns The created HTML input element.
-   */
-  private createFileInput(): HTMLInputElement {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "image/*";
-    input.multiple = true;
-    input.style.display = "none";
-
-    input.addEventListener("change", this.handleFileChange.bind(this));
-
-    return input;
-  }
-
-  /**
-   * Handles file selection and processes selected images.
-   * Creates multiple blocks with up to 3 images each following column layout.
-   * @param event - The file input change event.
-   */
-  private async handleFileChange(event: Event): Promise<void> {
-    const input = event.target as HTMLInputElement;
-    const files = input.files;
-
-    if (!files || files.length === 0) return;
-
-    try {
-      const imagesData = await Promise.all(
-        Array.from(files).map(async (file) => {
-          const imageUrl = URL.createObjectURL(file);
-          const { width, height } = await this.getImageDimensions(imageUrl);
-
-          return {
-            url: imageUrl,
-            size: file.size,
-            name: file.name,
-            type: file.type,
-            width,
-            height,
-            ratio: width / height,
-          };
-        })
-      );
-
-      const columnCount = Math.ceil(imagesData.length / 3);
-      const columns: Array<typeof imagesData> = Array.from(
-        { length: columnCount },
-        () => []
-      );
-
-      imagesData.forEach((imageData, index) => {
-        const colIndex = index % columnCount;
-        columns[colIndex].push(imageData);
-      });
-
-      columns.forEach((columnImages) => {
-        this.api.blocks.insert("groupImage", { images: columnImages });
-      });
-    } catch (error) {
-      console.error("Error processing images:", error);
-    }
-
-    input.value = "";
-  }
-
-  /**
-   * Gets image dimensions by loading the image.
-   * @param url - The image URL to measure.
-   * @returns Promise resolving to width and height dimensions.
-   */
-  private getImageDimensions(
-    url: string
-  ): Promise<{ width: number; height: number }> {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => resolve({ width: img.width, height: img.height });
-      img.onerror = () => reject(new Error("Failed to load image"));
-      img.src = url;
-    });
-  }
-
-  /**
    * Callback executed when the tool is selected from the toolbox.
    * Triggers the file selection dialog.
    */
   public appendCallback(): void {
-    this.fileInput.click();
+    this.fileHandler.selectFiles();
   }
 
   /**
@@ -483,7 +376,7 @@ export default class GroupImage implements BlockTool {
     e.preventDefault();
     e.stopPropagation();
 
-    this.clearDragOverEffects();
+    Helpers.clearDragOverEffects();
 
     const targetItem = e.currentTarget as HTMLElement;
     if (!targetItem) return;
@@ -496,7 +389,7 @@ export default class GroupImage implements BlockTool {
       return;
     }
 
-    const dropType = this.getDropType(e, targetItem);
+    const dropType = Helpers.getDropType(e, targetItem);
     let targetElement: HTMLElement | null = targetItem;
 
     if (dropType === "top" || dropType === "bottom") {
@@ -521,33 +414,6 @@ export default class GroupImage implements BlockTool {
     }
 
     targetItem.dataset.dropType = dropType || "";
-  }
-
-  /**
-   * Determines the drop type based on mouse position relative to target element.
-   * @param e - The drag event.
-   * @param targetItem - The target HTML element.
-   * @returns The drop type direction or null.
-   */
-  private getDropType(
-    e: DragEvent,
-    targetItem: HTMLElement
-  ): "top" | "bottom" | "left" | "right" | null {
-    const rect = targetItem.getBoundingClientRect();
-    const mouseX = e.clientX;
-    const mouseY = e.clientY;
-
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
-
-    const deltaX = mouseX - centerX;
-    const deltaY = mouseY - centerY;
-
-    if (Math.abs(deltaY) > Math.abs(deltaX)) {
-      return deltaY < 0 ? "top" : "bottom";
-    } else {
-      return deltaX < 0 ? "left" : "right";
-    }
   }
 
   /**
@@ -588,7 +454,7 @@ export default class GroupImage implements BlockTool {
     if (dropType === "top" || dropType === "bottom") {
       this.onDropNewBlock(dropType, blockIndex, targetIndex, droppedBlockIndex);
     } else {
-      const dropPosition = this.getDropPosition(e, targetItem);
+      const dropPosition = Helpers.getDropPosition(e, targetItem);
 
       if (GroupImage.sourceInstance === this) {
         this.handleInternalDrop(sourceIndex, dropPosition);
@@ -597,7 +463,7 @@ export default class GroupImage implements BlockTool {
       }
     }
 
-    this.clearDragOverEffects();
+    Helpers.clearDragOverEffects();
     this.updateView();
 
     GroupImage.draggedImage = null;
@@ -676,25 +542,6 @@ export default class GroupImage implements BlockTool {
   }
 
   /**
-   * Gets the drop position index based on mouse coordinates.
-   * @param e - The drag event.
-   * @param element - The target element.
-   * @returns The calculated drop index.
-   */
-  private getDropPosition(e: DragEvent, element: HTMLElement): number {
-    const rect = element.getBoundingClientRect();
-    const mouseX = e.clientX;
-    const elementX = rect.left;
-    const elementWidth = rect.width;
-
-    if (mouseX < elementX + elementWidth / 2) {
-      const index = parseInt(element.dataset.index || "0");
-      return index;
-    }
-    return parseInt(element.dataset.index || "0") + 1;
-  }
-
-  /**
    * Handles image reordering within the same block.
    * @param sourceIndex - The source image index.
    * @param dropPosition - The target drop position.
@@ -755,25 +602,7 @@ export default class GroupImage implements BlockTool {
   onDragLeave(e: DragEvent): void {
     e.preventDefault();
     e.stopPropagation();
-    this.clearDragOverEffects();
-  }
-
-  /**
-   * Removes all drag-over visual effects from elements.
-   */
-  clearDragOverEffects(): void {
-    const allItems = document.querySelectorAll(
-      ".drag-over-left, .drag-over-right, .drag-over-top, .drag-over-bottom"
-    );
-
-    allItems.forEach((el) => {
-      el.classList.remove(
-        "drag-over-left",
-        "drag-over-right",
-        "drag-over-top",
-        "drag-over-bottom"
-      );
-    });
+    Helpers.clearDragOverEffects();
   }
 
   /**
@@ -794,7 +623,7 @@ export default class GroupImage implements BlockTool {
     }
 
     const items = this._element.querySelectorAll(`.${this._CSS.groupImage}`);
-    this.clearDragOverEffects();
+    Helpers.clearDragOverEffects();
 
     if (items.length === 0) {
       this._element.classList.add("drag-over-empty");
@@ -846,7 +675,7 @@ export default class GroupImage implements BlockTool {
 
       const items = this._element.querySelectorAll(`.${this._CSS.groupImage}`);
       if (items.length > 0) {
-        dropIndex = this.determineDropIndex(e, items);
+        dropIndex = Helpers.determineDropIndex(e, items);
       }
 
       images.splice(dropIndex, 0, GroupImage.draggedImage);
@@ -860,23 +689,6 @@ export default class GroupImage implements BlockTool {
       GroupImage.sourceInstance.updateView();
       this.updateView();
     }
-  }
-
-  /**
-   * Determines the drop index based on mouse position relative to existing images.
-   * @param e - The drag event.
-   * @param items - NodeList of existing image elements.
-   * @returns The calculated drop index.
-   */
-  private determineDropIndex(e: DragEvent, items: NodeListOf<Element>): number {
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      const rect = item.getBoundingClientRect();
-      if (e.clientX < rect.left + rect.width / 2) {
-        return i;
-      }
-    }
-    return items.length;
   }
 
   /**
@@ -921,7 +733,7 @@ export default class GroupImage implements BlockTool {
    * Handles paste events (currently resets data).
    */
   onPaste(): void {
-    this.data = {};
+    this.data = { images: [], caption: "" };
   }
 
   /**

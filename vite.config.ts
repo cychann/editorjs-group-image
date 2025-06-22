@@ -8,7 +8,7 @@ export default defineConfig({
     lib: {
       entry: resolve(__dirname, "src/index.ts"),
       name: "EditorJSGroupImage",
-      fileName: (format) => `editorjs-quote.${format}.js`,
+      fileName: (format) => `editorjs-group-image.${format}.js`,
       formats: ["es", "umd"],
     },
     rollupOptions: {
