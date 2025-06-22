@@ -1,8 +1,8 @@
 {
   "name": "@cychann/editorjs-group-image",
   "type": "module",
-  "version": "0.0.0",
-  "description": "Editor.js group image with drag and drop options",
+  "version": "1.0.0",
+  "description": "Multi-image block with drag-and-drop for Editor.js",
   "keywords": [
     "editorjs",
     "editor.js",
