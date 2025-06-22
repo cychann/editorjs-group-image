@@ -8,45 +8,142 @@ import {
   PasteConfig,
 } from "@editorjs/editorjs";
 
-export default class UnifiedImage implements BlockTool {
-  static draggedImage: any = null;
-  static sourceInstance: UnifiedImage | null = null;
-  static sourceIndex: number | null = null;
-  static activeImageBlock: UnifiedImage | null = null;
+/**
+ * Data structure for the GroupImage block.
+ */
+export interface GroupImageData {
+  images: ImageData[];
+  caption: string;
+}
 
+/**
+ * Data structure for individual image items.
+ */
+export interface ImageData {
+  url: string;
+  name: string;
+  size: number;
+  type: string;
+  width: number;
+  height: number;
+  ratio: number;
+}
+
+/**
+ * CSS class names used in the GroupImage block.
+ */
+interface GroupImageCSS {
+  block: string;
+  imageWrapper: string;
+  wrapper: string;
+  groupImage: string;
+  imageItem: string;
+  caption: string;
+}
+
+/**
+ * GroupImage class representing a multi-image block with drag-and-drop functionality for Editor.js.
+ *
+ * Features:
+ * - Multiple image upload with automatic layout
+ * - Drag-and-drop reordering within and between blocks
+ * - Vertical drag separation into new blocks
+ * - Interactive caption system
+ * - Responsive layout with aspect ratio calculations
+ */
+export default class GroupImage implements BlockTool {
+  // Static Properties
+  /**
+   * Currently dragged image data.
+   */
+  static draggedImage: any = null;
+
+  /**
+   * Source instance of the drag operation.
+   */
+  static sourceInstance: GroupImage | null = null;
+
+  /**
+   * Index of the dragged image in source block.
+   */
+  static sourceIndex: number | null = null;
+
+  /**
+   * Currently active image block instance.
+   */
+  static activeImageBlock: GroupImage | null = null;
+
+  // Static Getters
+  /**
+   * Indicates if the tool supports read-only mode.
+   * @returns True if read-only mode is supported.
+   */
   static get isReadOnlySupported(): boolean {
     return true;
   }
 
+  /**
+   * Indicates if the tool is contentless.
+   * @returns True if the tool is contentless.
+   */
   static get contentless(): boolean {
     return true;
   }
 
+  /**
+   * Gets the toolbox configuration for the GroupImage tool.
+   * @returns The toolbox configuration object.
+   */
   static get toolbox(): ToolboxConfig {
     return {
       icon: "🖼️",
-      title: "Unified Image",
+      title: "Group Image",
     };
   }
 
+  /**
+   * Gets the paste configuration for the GroupImage tool.
+   * @returns The paste configuration object.
+   */
   static get pasteConfig(): PasteConfig {
     return { tags: [] };
   }
 
+  // Instance Properties
+  /**
+   * Editor.js API instance.
+   */
   private api: API;
-  private _CSS: {
-    block: string;
-    imageWrapper: string;
-    wrapper: string;
-    groupImage: string;
-    imageItem: string;
-    caption: string;
-  };
+
+  /**
+   * CSS class names used in the block.
+   */
+  private _CSS: GroupImageCSS;
+
+  /**
+   * Block data containing images and caption.
+   */
   private data: BlockToolData;
+
+  /**
+   * Root HTML element of the block.
+   */
   private _element: HTMLDivElement;
+
+  /**
+   * Flag indicating if caption is currently activated.
+   */
   private activateCaption: boolean;
+
+  /**
+   * Hidden file input element for image selection.
+   */
   private fileInput: HTMLInputElement;
 
+  /**
+   * Creates an instance of the GroupImage block.
+   * @param params - The constructor parameters containing data, config, and API.
+   */
   constructor({ data, api }: BlockToolConstructorOptions) {
     this.api = api;
     this.data = data || { images: [], caption: "" };
@@ -56,17 +153,25 @@ export default class UnifiedImage implements BlockTool {
     this.fileInput = this.createFileInput();
   }
 
-  private initializeCSS() {
+  /**
+   * Initializes CSS class names for the block.
+   * @returns Object containing CSS class names.
+   */
+  private initializeCSS(): GroupImageCSS {
     return {
       block: this.api.styles.block,
-      imageWrapper: "ce-unified-image-wrapper",
-      wrapper: "ce-unified-image",
-      groupImage: "unified-image-wrapper",
-      imageItem: "unified-image-item",
-      caption: "unified-image-caption",
+      imageWrapper: "ce-group-image-wrapper",
+      wrapper: "ce-group-image",
+      groupImage: "group-image-wrapper",
+      imageItem: "group-image-item",
+      caption: "group-image-caption",
     };
   }
 
+  /**
+   * Creates a hidden file input element for image selection.
+   * @returns The created HTML input element.
+   */
   private createFileInput(): HTMLInputElement {
     const input = document.createElement("input");
     input.type = "file";
@@ -79,6 +184,11 @@ export default class UnifiedImage implements BlockTool {
     return input;
   }
 
+  /**
+   * Handles file selection and processes selected images.
+   * Creates multiple blocks with up to 3 images each following column layout.
+   * @param event - The file input change event.
+   */
   private async handleFileChange(event: Event): Promise<void> {
     const input = event.target as HTMLInputElement;
     const files = input.files;
@@ -114,20 +224,9 @@ export default class UnifiedImage implements BlockTool {
         columns[colIndex].push(imageData);
       });
 
-      if (!this.data.images || this.data.images.length === 0) {
-        if (columns.length > 0) {
-          this.data.images = columns[0];
-          this.updateView();
-
-          columns.slice(1).forEach((columnImages) => {
-            this.api.blocks.insert("groupImage", { images: columnImages });
-          });
-        }
-      } else {
-        columns.forEach((columnImages) => {
-          this.api.blocks.insert("groupImage", { images: columnImages });
-        });
-      }
+      columns.forEach((columnImages) => {
+        this.api.blocks.insert("groupImage", { images: columnImages });
+      });
     } catch (error) {
       console.error("Error processing images:", error);
     }
@@ -135,6 +234,11 @@ export default class UnifiedImage implements BlockTool {
     input.value = "";
   }
 
+  /**
+   * Gets image dimensions by loading the image.
+   * @param url - The image URL to measure.
+   * @returns Promise resolving to width and height dimensions.
+   */
   private getImageDimensions(
     url: string
   ): Promise<{ width: number; height: number }> {
@@ -146,10 +250,18 @@ export default class UnifiedImage implements BlockTool {
     });
   }
 
+  /**
+   * Callback executed when the tool is selected from the toolbox.
+   * Triggers the file selection dialog.
+   */
   public appendCallback(): void {
     this.fileInput.click();
   }
 
+  /**
+   * Creates and returns the HTML structure for the block.
+   * @returns The root HTML element of the block.
+   */
   drawView(): HTMLDivElement {
     const wrapper = document.createElement("div");
     wrapper.classList.add(this._CSS.wrapper, this._CSS.block);
@@ -201,30 +313,49 @@ export default class UnifiedImage implements BlockTool {
     return wrapper;
   }
 
-  private updateCaptionVisibility(caption: HTMLInputElement) {
+  /**
+   * Updates caption visibility based on content and activation state.
+   * @param caption - The caption input element.
+   */
+  private updateCaptionVisibility(caption: HTMLInputElement): void {
     const shouldShowCaption =
       this.data.caption ||
-      (UnifiedImage.activeImageBlock === this && this.activateCaption);
+      (GroupImage.activeImageBlock === this && this.activateCaption);
 
     shouldShowCaption ? this.showCaption(caption) : this.hideCaption(caption);
   }
 
-  private deactivate() {
+  /**
+   * Deactivates the block and removes active state.
+   */
+  private deactivate(): void {
     this.activateCaption = false;
     this._element.classList.remove("active");
   }
 
+  /**
+   * Shows the caption input element.
+   * @param caption - The caption element to show.
+   */
   private showCaption(caption: HTMLElement): void {
     this.activateCaption = true;
     caption.style.display = "block";
   }
 
+  /**
+   * Hides the caption input element.
+   * @param caption - The caption element to hide.
+   */
   private hideCaption(caption: HTMLElement): void {
     this.activateCaption = false;
     caption.style.display = "none";
   }
 
-  private handleKeyDown = (e: KeyboardEvent) => {
+  /**
+   * Handles keyboard events for the block.
+   * @param e - The keyboard event.
+   */
+  private handleKeyDown = (e: KeyboardEvent): void => {
     const isCaption = e.target instanceof HTMLInputElement;
 
     if (e.key === "Backspace" && !isCaption) {
@@ -233,6 +364,10 @@ export default class UnifiedImage implements BlockTool {
     }
   };
 
+  /**
+   * Renders all images in the block with proper layout calculations.
+   * @param wrapper - The container element for images.
+   */
   private renderImages(wrapper: HTMLDivElement): void {
     const images = this.data.images || [];
     const totalAspectRatio = images.reduce(
@@ -251,6 +386,14 @@ export default class UnifiedImage implements BlockTool {
     });
   }
 
+  /**
+   * Creates a wrapper element for an individual image with calculated dimensions.
+   * @param imageData - The image data object.
+   * @param index - The image index in the block.
+   * @param totalAspectRatio - Sum of all image aspect ratios.
+   * @param totalImages - Total number of images in the block.
+   * @returns The created image wrapper element.
+   */
   private createImageWrapper(
     imageData: any,
     index: number,
@@ -285,6 +428,12 @@ export default class UnifiedImage implements BlockTool {
     return imageWrapper;
   }
 
+  /**
+   * Adds drag-and-drop event listeners to an image wrapper.
+   * @param imageWrapper - The image wrapper element.
+   * @param imageData - The image data object.
+   * @param index - The image index in the block.
+   */
   private addImageEventListeners(
     imageWrapper: HTMLDivElement,
     imageData: any,
@@ -298,13 +447,19 @@ export default class UnifiedImage implements BlockTool {
     imageWrapper.addEventListener("dragleave", this.onDragLeave.bind(this));
   }
 
+  /**
+   * Handles the start of a drag operation.
+   * @param e - The drag event.
+   * @param imageData - The data of the dragged image.
+   * @param index - The index of the dragged image.
+   */
   onDragStart(e: DragEvent, imageData: any, index: number): void {
     if (!e.dataTransfer) return;
     e.dataTransfer.effectAllowed = "move";
 
-    UnifiedImage.draggedImage = imageData;
-    UnifiedImage.sourceInstance = this;
-    UnifiedImage.sourceIndex = index;
+    GroupImage.draggedImage = imageData;
+    GroupImage.sourceInstance = this;
+    GroupImage.sourceIndex = index;
 
     e.dataTransfer.setData(
       "application/json",
@@ -316,9 +471,14 @@ export default class UnifiedImage implements BlockTool {
     );
 
     this.deactivate();
-    UnifiedImage.activeImageBlock = null;
+    GroupImage.activeImageBlock = null;
   }
 
+  /**
+   * Handles drag over events and shows visual indicators.
+   * @param e - The drag event.
+   * @param index - The index of the target image.
+   */
   onDragOver(e: DragEvent, index: number): void {
     e.preventDefault();
     e.stopPropagation();
@@ -329,9 +489,9 @@ export default class UnifiedImage implements BlockTool {
     if (!targetItem) return;
 
     if (
-      UnifiedImage.sourceInstance &&
-      UnifiedImage.sourceInstance === this &&
-      UnifiedImage.sourceIndex === index
+      GroupImage.sourceInstance &&
+      GroupImage.sourceInstance === this &&
+      GroupImage.sourceIndex === index
     ) {
       return;
     }
@@ -360,11 +520,15 @@ export default class UnifiedImage implements BlockTool {
         break;
     }
 
-    if (dropType !== null) {
-      targetItem.dataset.dropType = dropType;
-    }
+    targetItem.dataset.dropType = dropType || "";
   }
 
+  /**
+   * Determines the drop type based on mouse position relative to target element.
+   * @param e - The drag event.
+   * @param targetItem - The target HTML element.
+   * @returns The drop type direction or null.
+   */
   private getDropType(
     e: DragEvent,
     targetItem: HTMLElement
@@ -386,6 +550,11 @@ export default class UnifiedImage implements BlockTool {
     }
   }
 
+  /**
+   * Handles drop events and performs image movement operations.
+   * @param e - The drag event.
+   * @param targetIndex - The index of the drop target.
+   */
   async onDrop(e: DragEvent, targetIndex: number): Promise<void> {
     e.preventDefault();
     e.stopPropagation();
@@ -399,8 +568,8 @@ export default class UnifiedImage implements BlockTool {
     const targetItem = e.currentTarget as HTMLElement;
 
     if (
-      UnifiedImage.sourceInstance &&
-      UnifiedImage.sourceInstance === this &&
+      GroupImage.sourceInstance &&
+      GroupImage.sourceInstance === this &&
       sourceIndex === targetIndex
     ) {
       return;
@@ -421,9 +590,9 @@ export default class UnifiedImage implements BlockTool {
     } else {
       const dropPosition = this.getDropPosition(e, targetItem);
 
-      if (UnifiedImage.sourceInstance === this) {
+      if (GroupImage.sourceInstance === this) {
         this.handleInternalDrop(sourceIndex, dropPosition);
-      } else if (UnifiedImage.sourceInstance && UnifiedImage.draggedImage) {
+      } else if (GroupImage.sourceInstance && GroupImage.draggedImage) {
         await this.handleExternalDrop(sourceBlock, blockIndex, dropPosition);
       }
     }
@@ -431,46 +600,56 @@ export default class UnifiedImage implements BlockTool {
     this.clearDragOverEffects();
     this.updateView();
 
-    UnifiedImage.draggedImage = null;
-    UnifiedImage.sourceInstance = null;
-    UnifiedImage.sourceIndex = null;
+    GroupImage.draggedImage = null;
+    GroupImage.sourceInstance = null;
+    GroupImage.sourceIndex = null;
   }
 
+  /**
+   * Handles dropping an image to create a new block (vertical separation).
+   * @param position - The drop position ("top" or "bottom").
+   * @param blockIndex - The source block index.
+   * @param droppedTargetIndex - The target image index.
+   * @param droppedBlockIndex - The new block insertion index.
+   */
   private onDropNewBlock(
     position: "top" | "bottom",
     blockIndex: number,
     droppedTargetIndex: number,
     droppedBlockIndex: number
   ): void {
-    if (!UnifiedImage.draggedImage || !UnifiedImage.sourceInstance) return;
+    if (!GroupImage.draggedImage || !GroupImage.sourceInstance) return;
+
     if (
       blockIndex === droppedBlockIndex &&
-      UnifiedImage.sourceIndex === droppedTargetIndex
+      GroupImage.sourceIndex === droppedTargetIndex
     )
       return;
+
     if (
-      UnifiedImage.sourceInstance.data.images.length === 1 &&
+      GroupImage.sourceInstance.data.images.length === 1 &&
       position === "top" &&
       blockIndex === droppedBlockIndex - 1
     )
       return;
+
     if (
-      UnifiedImage.sourceInstance.data.images.length === 1 &&
+      GroupImage.sourceInstance.data.images.length === 1 &&
       position === "bottom" &&
       blockIndex === droppedBlockIndex + 1
     )
       return;
 
     const draggedImageData = {
-      url: UnifiedImage.draggedImage.url,
-      name: UnifiedImage.draggedImage.name,
-      ratio: UnifiedImage.draggedImage.ratio,
-      width: UnifiedImage.draggedImage.width,
+      url: GroupImage.draggedImage.url,
+      name: GroupImage.draggedImage.name,
+      ratio: GroupImage.draggedImage.ratio,
+      width: GroupImage.draggedImage.width,
     };
 
-    const updatedImages = [...UnifiedImage.sourceInstance.data.images];
-    updatedImages.splice(UnifiedImage.sourceIndex!, 1);
-    UnifiedImage.sourceInstance.data.images = updatedImages;
+    const updatedImages = [...GroupImage.sourceInstance.data.images];
+    updatedImages.splice(GroupImage.sourceIndex!, 1);
+    GroupImage.sourceInstance.data.images = updatedImages;
 
     const newBlockData = { images: [draggedImageData] };
     this.api.blocks.insert(
@@ -485,17 +664,23 @@ export default class UnifiedImage implements BlockTool {
       const blockToDeleteIndex =
         blockIndex > droppedBlockIndex ? blockIndex + 1 : blockIndex;
       this.api.blocks.delete(blockToDeleteIndex);
-    } else if (UnifiedImage.sourceInstance) {
-      UnifiedImage.sourceInstance.updateView();
+    } else if (GroupImage.sourceInstance) {
+      GroupImage.sourceInstance.updateView();
     }
 
-    UnifiedImage.draggedImage = null;
-    UnifiedImage.sourceInstance = null;
-    UnifiedImage.sourceIndex = null;
+    GroupImage.draggedImage = null;
+    GroupImage.sourceInstance = null;
+    GroupImage.sourceIndex = null;
 
     this.updateView();
   }
 
+  /**
+   * Gets the drop position index based on mouse coordinates.
+   * @param e - The drag event.
+   * @param element - The target element.
+   * @returns The calculated drop index.
+   */
   private getDropPosition(e: DragEvent, element: HTMLElement): number {
     const rect = element.getBoundingClientRect();
     const mouseX = e.clientX;
@@ -509,6 +694,11 @@ export default class UnifiedImage implements BlockTool {
     return parseInt(element.dataset.index || "0") + 1;
   }
 
+  /**
+   * Handles image reordering within the same block.
+   * @param sourceIndex - The source image index.
+   * @param dropPosition - The target drop position.
+   */
   private handleInternalDrop(sourceIndex: number, dropPosition: number): void {
     const images = [...this.data.images];
     const [movedImage] = images.splice(sourceIndex, 1);
@@ -518,25 +708,31 @@ export default class UnifiedImage implements BlockTool {
     this.updateView();
   }
 
+  /**
+   * Handles image movement between different blocks.
+   * @param sourceBlock - The source block object.
+   * @param blockIndex - The source block index.
+   * @param dropPosition - The target drop position.
+   */
   private async handleExternalDrop(
     sourceBlock: any,
     blockIndex: number,
     dropPosition: number
   ): Promise<void> {
-    if (!UnifiedImage.sourceInstance) return;
+    if (!GroupImage.sourceInstance) return;
 
-    const sourceImages = [...UnifiedImage.sourceInstance.data.images];
+    const sourceImages = [...GroupImage.sourceInstance.data.images];
     const targetImages = [...this.data.images];
 
     if (targetImages.length < 3) {
-      sourceImages.splice(UnifiedImage.sourceIndex!, 1);
-      UnifiedImage.sourceInstance.data.images = sourceImages;
+      sourceImages.splice(GroupImage.sourceIndex!, 1);
+      GroupImage.sourceInstance.data.images = sourceImages;
 
-      targetImages.splice(dropPosition, 0, UnifiedImage.draggedImage);
+      targetImages.splice(dropPosition, 0, GroupImage.draggedImage);
       this.data.images = targetImages;
 
       await this.api.blocks.update(sourceBlock.id, {
-        ...UnifiedImage.sourceInstance.data,
+        ...GroupImage.sourceInstance.data,
       });
       const currentBlock = this.api.blocks.getBlockByIndex(
         this.api.blocks.getCurrentBlockIndex()
@@ -552,12 +748,19 @@ export default class UnifiedImage implements BlockTool {
     this.updateView();
   }
 
+  /**
+   * Handles drag leave events.
+   * @param e - The drag event.
+   */
   onDragLeave(e: DragEvent): void {
     e.preventDefault();
     e.stopPropagation();
     this.clearDragOverEffects();
   }
 
+  /**
+   * Removes all drag-over visual effects from elements.
+   */
   clearDragOverEffects(): void {
     const allItems = document.querySelectorAll(
       ".drag-over-left, .drag-over-right, .drag-over-top, .drag-over-bottom"
@@ -573,11 +776,15 @@ export default class UnifiedImage implements BlockTool {
     });
   }
 
+  /**
+   * Handles drag over events on the block level.
+   * @param e - The drag event.
+   */
   onDragOverBlock(e: DragEvent): void {
     e.preventDefault();
     e.stopPropagation();
 
-    if (UnifiedImage.sourceInstance && UnifiedImage.sourceInstance === this) {
+    if (GroupImage.sourceInstance && GroupImage.sourceInstance === this) {
       return;
     }
 
@@ -602,28 +809,36 @@ export default class UnifiedImage implements BlockTool {
     this.updateView();
   }
 
+  /**
+   * Handles drop events on the block level.
+   * @param e - The drag event.
+   */
   onDropBlock(e: DragEvent): void {
     e.preventDefault();
     e.stopPropagation();
 
-    if (UnifiedImage.sourceInstance && UnifiedImage.sourceInstance === this) {
+    if (GroupImage.sourceInstance && GroupImage.sourceInstance === this) {
       return;
     }
 
-    if (!UnifiedImage.draggedImage || !UnifiedImage.sourceInstance) return;
+    if (!GroupImage.draggedImage || !GroupImage.sourceInstance) return;
 
     this.handleBlockDrop(e);
 
     this._element.classList.remove("drag-over-empty");
 
-    UnifiedImage.draggedImage = null;
-    UnifiedImage.sourceInstance = null;
-    UnifiedImage.sourceIndex = null;
+    GroupImage.draggedImage = null;
+    GroupImage.sourceInstance = null;
+    GroupImage.sourceIndex = null;
     this.updateView();
   }
 
+  /**
+   * Handles dropping images onto empty or available block space.
+   * @param e - The drag event.
+   */
   private handleBlockDrop(e: DragEvent): void {
-    if (!UnifiedImage.sourceInstance) return;
+    if (!GroupImage.sourceInstance) return;
 
     const images = [...(this.data.images || [])];
     if (images.length < 3) {
@@ -634,19 +849,25 @@ export default class UnifiedImage implements BlockTool {
         dropIndex = this.determineDropIndex(e, items);
       }
 
-      images.splice(dropIndex, 0, UnifiedImage.draggedImage);
+      images.splice(dropIndex, 0, GroupImage.draggedImage);
       this.data.images = images;
 
-      const sourceImages = [...UnifiedImage.sourceInstance.data.images];
-      sourceImages.splice(UnifiedImage.sourceIndex!, 1);
-      UnifiedImage.sourceInstance.data.images = sourceImages;
+      const sourceImages = [...GroupImage.sourceInstance.data.images];
+      sourceImages.splice(GroupImage.sourceIndex!, 1);
+      GroupImage.sourceInstance.data.images = sourceImages;
 
       this.updateBlocks();
-      UnifiedImage.sourceInstance.updateView();
+      GroupImage.sourceInstance.updateView();
       this.updateView();
     }
   }
 
+  /**
+   * Determines the drop index based on mouse position relative to existing images.
+   * @param e - The drag event.
+   * @param items - NodeList of existing image elements.
+   * @returns The calculated drop index.
+   */
   private determineDropIndex(e: DragEvent, items: NodeListOf<Element>): number {
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
@@ -658,14 +879,17 @@ export default class UnifiedImage implements BlockTool {
     return items.length;
   }
 
+  /**
+   * Updates block data in the Editor.js blocks collection.
+   */
   private updateBlocks(): void {
-    if (!UnifiedImage.sourceInstance) return;
+    if (!GroupImage.sourceInstance) return;
 
     const sourceBlock = this.api.blocks.getBlockByIndex(
       this.api.blocks.getCurrentBlockIndex() - 1
     );
     if (sourceBlock) {
-      this.api.blocks.update(sourceBlock.id, UnifiedImage.sourceInstance.data);
+      this.api.blocks.update(sourceBlock.id, GroupImage.sourceInstance.data);
     }
 
     const currentBlock = this.api.blocks.getBlockByIndex(
@@ -676,20 +900,34 @@ export default class UnifiedImage implements BlockTool {
     }
   }
 
+  /**
+   * Updates the view by recreating the DOM structure.
+   */
   updateView(): void {
     const newElement = this.drawView();
     this._element.replaceWith(newElement);
     this._element = newElement;
   }
 
+  /**
+   * Saves and returns the current block data.
+   * @returns The current block data.
+   */
   save(): BlockToolData {
     return this.data;
   }
 
+  /**
+   * Handles paste events (currently resets data).
+   */
   onPaste(): void {
     this.data = {};
   }
 
+  /**
+   * Renders and returns the block's HTML element.
+   * @returns The root HTML element of the block.
+   */
   render(): HTMLDivElement {
     return this._element;
   }
