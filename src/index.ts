@@ -168,7 +168,7 @@ export default class GroupImage implements BlockTool {
 
     const caption = document.createElement("input");
     caption.classList.add(this._CSS.caption);
-    caption.placeholder = "이미지를 설명해보세요";
+    caption.placeholder = "Describe the image...";
     caption.value = this.data.caption || "";
 
     caption.addEventListener("input", (e: Event) => {
